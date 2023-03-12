@@ -3,31 +3,42 @@ package main
 import (
 	"fmt"
 	"gin/models"
+	"gin/pkg/gredis"
 	"gin/pkg/logging"
 	"gin/pkg/setting"
+	"gin/pkg/util"
 	"gin/routers"
-	"github.com/fvbock/endless"
+	"github.com/gin-gonic/gin"
 	"log"
-	"syscall"
+	"net/http"
 )
 
-func main() {
+func init() {
 	setting.Setup()
 	models.Setup()
 	logging.Setup()
+	gredis.Setup()
+	util.Setup()
+}
 
-	endless.DefaultReadTimeOut = setting.ServerSetting.ReadTimeout
-	endless.DefaultWriteTimeOut = setting.ServerSetting.WriteTimeout
-	endless.DefaultMaxHeaderBytes = 1 << 20
+func main() {
+	gin.SetMode(setting.ServerSetting.RunMode)
+
+	routersInit := routers.InitRouter()
+	readTimeout := setting.ServerSetting.ReadTimeout
+	writeTimeout := setting.ServerSetting.WriteTimeout
 	endPoint := fmt.Sprintf(":%d", setting.ServerSetting.HttpPort)
+	maxHeaderBytes := 1 << 20
 
-	server := endless.NewServer(endPoint, routers.InitRouter())
-	server.BeforeBegin = func(add string) {
-		log.Printf("Actual pid is %d", syscall.Getpid())
+	server := &http.Server{
+		Addr:           endPoint,
+		Handler:        routersInit,
+		ReadTimeout:    readTimeout,
+		WriteTimeout:   writeTimeout,
+		MaxHeaderBytes: maxHeaderBytes,
 	}
 
-	err := server.ListenAndServe()
-	if err != nil {
-		log.Printf("Server err: %v", err)
-	}
+	log.Printf("[info] start http server listening %s", endPoint)
+
+	server.ListenAndServe()
 }
